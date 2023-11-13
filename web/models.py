@@ -30,8 +30,6 @@ class BaseModel(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     edited_at = models.DateTimeField(auto_now_add=True)
     private = models.BooleanField(default=False)
-    # groups = models.ManyToManyField(Group, blank=True)
-    # user_permissions = models.ManyToManyField(Permission, blank=True)
 
 
 class User(AbstractUser):
@@ -39,52 +37,62 @@ class User(AbstractUser):
     edited_at = models.DateTimeField(auto_now_add=True)
 
 
-class UnitOfMeasure(BaseModel):
+class UOMCategory(BaseModel):
     name = models.CharField(max_length=50, unique=True)
     description = models.TextField(max_length=200)
 
+    def __str__(self)-> str:
+        return self.name
+
+
+class UnitOfMeasure(BaseModel):
+    name = models.CharField(max_length=50, unique=True)
+    category = models.ForeignKey(
+        UOMCategory, blank=False, null=True, on_delete=models.SET_NULL)
+    sub_unit = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name='supra_unit')
+    sub_unit_multiplier = models.FloatField(blank=True)
+    description = models.TextField(max_length=200)
+
     def __str__(self):
-        return f'<UOM: {self.name}>'
+        return self.name
 
 
 class Ingredient(BaseModel):
     name = models.CharField(max_length=50)
-    quantity = models.FloatField()
     unit_of_measurement = models.ForeignKey(
-        UnitOfMeasure, blank=False, on_delete=models.SET_NULL)
+        UnitOfMeasure, blank=False, null=True, on_delete=models.SET_NULL)
     note = models.TextField(max_length=255, blank=True)
 
     def __str__(self) -> str:
-        return f'<Ingredient: {self.quantity} {str(self.unit_of_measurement)} {self.name}>'
+        return f'<Ingredient: {str(self.unit_of_measurement)} {self.name}>'
+    
+
+class ReciepeLine(BaseModel):
+    rec_ingredient = models.ForeignKey(
+        Ingredient, on_delete=models.CASCADE)
+    quantity = models.FloatField()
+    related_reciepe = models.ForeignKey('Reciepe', on_delete=models.CASCADE, related_name='reciepe_lines')
+    note = models.TextField(max_length=255, blank=True)
+
+    def __str__(self) -> str:
+        return f'{str(self.rec_ingredient)} {self.quantity}>'
 
 
 class Reciepe(BaseModel):
     name = models.CharField(max_length=50, unique=True)
-    ingredients = models.ManyToManyField(Ingredient, blank=False)
     note = models.TextField(max_length=255, blank=True)
 
     def __str__(self) -> str:
         return f'<Reciepe: {self.name}>'
 
 
-class DensityReading(BaseModel):
-    read_value = models.FloatField()
-    note = models.TextField(max_length=255)
-
-    def __str__(self) -> str:
-        return f'<Reading: {self.read_value}, {str(self.date_time)}>'
-
-
 class BrewBatch(BaseModel):
-    reciepe = models.ForeignKey(
+    related_reciepe = models.ForeignKey(
         Reciepe, on_delete=models.SET_NULL, null=True, blank=True)
     volume_quantity = models.FloatField()
     volume_uom = models.ForeignKey(
-        UnitOfMeasure, blank=False, on_delete=models.SET_NULL)
+        UnitOfMeasure, blank=False, null=True, on_delete=models.SET_NULL)
     datetime_start = models.DateTimeField(auto_now=True)
-    initial_reading = models.ForeignKey(
-        DensityReading, on_delete=models.SET_NULL, null=True, blank=True)
-    readings = models.ManyToManyField(DensityReading, blank=True)
     date_end = models.DateField(blank=True)
     uid = models.CharField(max_length=50, default=generate_uuid_str)
 
@@ -101,3 +109,12 @@ class BrewBatch(BaseModel):
                 "No reciepe specified to compute quantities.")
         # todo: implement this
         pass
+
+
+class DensityReading(BaseModel):
+    read_value = models.FloatField()
+    note = models.TextField(max_length=255)
+    brew_batch = models.ForeignKey(BrewBatch, related_name='density_readings', on_delete=models.CASCADE)
+
+    def __str__(self) -> str:
+        return f'<Reading: {self.read_value}, {str(self.date_time)}>'
